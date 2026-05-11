@@ -37,19 +37,35 @@ After the first successful refresh the token pair lives in `<homebridge-config-d
 
 ## Getting Miele credentials
 
-1. Register an application at <https://developer.miele.com/> ("Get Involved" section). Once activated, the portal gives you a `clientID` and `clientSecret`.
-2. Run the one-time OAuth bootstrap helper locally to convert those into the initial access/refresh token pair:
+### 1. Get `clientID` + `clientSecret`
 
-   ```sh
-   npm run bootstrap-oauth -- \
-     --client-id     <YOUR_CLIENT_ID> \
-     --client-secret <YOUR_CLIENT_SECRET>
-     # add --vg CH-de / DE-de / US-en / ... if you're outside CH-de
-   ```
+Register at <https://developer.miele.com/> ("Get Involved" section). Activate via the email link, then copy the `clientID` and `clientSecret` from the portal.
 
-   The script spins a localhost listener, prints the Miele authorize URL, captures the redirect after you log in with your Miele@home account, exchanges the code, and prints the tokens.
+### 2. Pair via Homebridge UI (recommended)
 
-3. Paste the four values into Homebridge config.json. After the first successful refresh the plugin migrates the seeds into `<homebridge-config-dir>/MieleConnect.Token.json` and the `accessToken` / `refreshToken` fields can be removed.
+The plugin ships a custom Homebridge UI that handles the OAuth code exchange. In Homebridge Config UI X:
+
+1. Open the **Miele Connect** plugin settings.
+2. Fill in `clientID` and `clientSecret` in the form.
+3. In the **Miele OAuth pairing** card above the form, set `vg` (default `CH-de`) and click **Start pairing**.
+4. Click the **Open Miele authorize page** link, log in with your Miele@home account, approve the requested scope.
+5. The browser will fail to load `http://localhost:8581/miele-callback?code=…` — that's expected. Copy the `code` query parameter from the URL bar.
+6. Paste it into the **Authorization code** field and click **Complete pairing**.
+
+The access/refresh token pair is persisted to `<homebridge-config-dir>/MieleConnect.Token.json` (mode 0600) and refreshed automatically. The tokens never appear in `config.json`.
+
+### 2-alt. Pair via CLI (headless setups)
+
+If you don't have access to the Homebridge UI, the same exchange is available as a one-shot Node helper:
+
+```sh
+npm run bootstrap-oauth -- \
+  --client-id     <YOUR_CLIENT_ID> \
+  --client-secret <YOUR_CLIENT_SECRET>
+  # add --vg DE-de / US-en / ... if you're outside CH-de
+```
+
+It opens a localhost listener, prints the authorize URL, captures the redirect, exchanges the code, and prints the tokens for you to paste into the `accessToken` / `refreshToken` config fields.
 
 ## Status
 

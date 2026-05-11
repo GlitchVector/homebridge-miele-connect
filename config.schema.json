@@ -2,7 +2,8 @@
   "pluginAlias": "MieleConnect",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "Bridges Miele@home appliances into HomeKit via the Miele 3rd-party cloud API (REST + Server-Sent Events). Pair the plugin at https://www.miele.com/developer/ to obtain a client ID/secret + initial access/refresh token pair.",
+  "customUi": true,
+  "headerDisplay": "Bridges Miele@home appliances into HomeKit via the Miele 3rd-party cloud API (REST + Server-Sent Events). Get your `clientID` + `clientSecret` at https://developer.miele.com/, fill them in below, then use the **Miele OAuth pairing** card above to obtain and persist the access/refresh token pair.",
   "footerDisplay": "Token state is persisted under Homebridge's data directory. Once you've set the access/refresh token pair below they are migrated to the persistent store on first launch; subsequent refreshes happen automatically and you can leave the config fields blank after the first successful run.",
   "schema": {
     "type": "object",

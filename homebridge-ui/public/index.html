@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Miele Connect — OAuth pairing</title>
+  <style>
+    .miele-card {
+      border: 1px solid var(--card-border, rgba(0,0,0,0.125));
+      border-radius: 6px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1rem;
+      background: var(--card-bg, transparent);
+    }
+    .miele-card h3 { margin-top: 0; }
+    .miele-step { margin: 0.75rem 0; }
+    .miele-step input[type=text],
+    .miele-step input[type=password] { width: 100%; max-width: 32rem; }
+    .miele-actions { margin-top: 0.5rem; }
+    .miele-error { color: #b00020; white-space: pre-wrap; font-family: monospace; }
+    .miele-muted { color: var(--text-muted, #777); font-size: 0.9em; }
+    .miele-link-btn {
+      display: inline-block;
+      padding: 0.4rem 0.8rem;
+      background: #0066cc;
+      color: white;
+      border-radius: 4px;
+      text-decoration: none;
+    }
+    .miele-link-btn:hover { background: #0052a3; color: white; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="miele-card">
+    <h3>Miele OAuth pairing</h3>
+    <p class="miele-muted">
+      One-time setup. Fill in <code>clientID</code> and <code>clientSecret</code>
+      in the form below this card first (obtained from
+      <a href="https://developer.miele.com/" target="_blank">developer.miele.com</a>),
+      then run the steps here. The resulting access/refresh tokens are persisted
+      server-side under Homebridge's data directory — they don't appear in config.json.
+    </p>
+
+    <div class="miele-step" id="step-1">
+      <label>Region / language (vg):
+        <input type="text" id="vg" value="CH-de" />
+      </label>
+      <div class="miele-actions">
+        <button id="btn-start" type="button">Start pairing</button>
+      </div>
+    </div>
+
+    <div class="miele-step" id="step-2" style="display:none">
+      <p>
+        Click below to open the Miele login page. Approve the requested scope.
+        After approval the browser will try to load
+        <code>http://localhost:8581/miele-callback?code=…</code> and fail —
+        that's expected.
+      </p>
+      <p>
+        <a id="miele-authorize" target="_blank" rel="noopener" class="miele-link-btn">
+          Open Miele authorize page →
+        </a>
+      </p>
+      <p>From the failed-redirect URL bar, copy the <code>code</code> value and paste it here:</p>
+      <label>Authorization code:
+        <input type="text" id="auth-code" placeholder="abc123…" />
+      </label>
+      <div class="miele-actions">
+        <button id="btn-exchange" type="button">Complete pairing</button>
+      </div>
+    </div>
+
+    <div class="miele-step" id="step-3" style="display:none">
+      <p>
+        ✅ Pairing complete. Tokens saved to <code>MieleConnect.Token.json</code> in
+        Homebridge's data directory. Save this config and restart the
+        <strong>Miele Connect</strong> child bridge to start discovery.
+      </p>
+    </div>
+
+    <pre class="miele-error" id="miele-error"></pre>
+  </div>
+
+  <script>
+    (async () => {
+      // homebridge global is injected by Homebridge Config UI X. Show the
+      // schema form below our card so the user can still tweak clientID,
+      // clientSecret, language, periodic-reconnect etc. normally.
+      const hb = window.homebridge;
+      hb.showSchemaForm();
+
+      const errEl = document.getElementById("miele-error");
+      function showError(e) {
+        errEl.textContent = (e && (e.message || e.error)) || String(e);
+      }
+      function clearError() { errEl.textContent = ""; }
+
+      const step1 = document.getElementById("step-1");
+      const step2 = document.getElementById("step-2");
+      const step3 = document.getElementById("step-3");
+      const vgInput = document.getElementById("vg");
+      const codeInput = document.getElementById("auth-code");
+      const authorizeLink = document.getElementById("miele-authorize");
+
+      let session = null; // { clientID, clientSecret, redirectUri, state }
+
+      async function readClientCreds() {
+        const cfg = await hb.getPluginConfig();
+        const item = (cfg && cfg[0]) || {};
+        return { clientID: item.clientID, clientSecret: item.clientSecret };
+      }
+
+      document.getElementById("btn-start").addEventListener("click", async () => {
+        clearError();
+        try {
+          const { clientID, clientSecret } = await readClientCreds();
+          if (!clientID || !clientSecret) {
+            throw new Error("Set clientID and clientSecret in the form below first, then click Start pairing.");
+          }
+          const vg = vgInput.value.trim() || "CH-de";
+          const r = await hb.request("/start", { clientID, vg });
+          session = { clientID, clientSecret, redirectUri: r.redirectUri, state: r.state };
+          authorizeLink.href = r.authorizeUrl;
+          step1.style.display = "none";
+          step2.style.display = "block";
+        } catch (e) { showError(e); }
+      });
+
+      document.getElementById("btn-exchange").addEventListener("click", async () => {
+        clearError();
+        try {
+          if (!session) throw new Error("No active pairing session — click Start pairing first.");
+          const code = codeInput.value.trim();
+          if (!code) throw new Error("Paste the authorization code from the redirected URL.");
+          await hb.request("/exchange", {
+            clientID: session.clientID,
+            clientSecret: session.clientSecret,
+            redirectUri: session.redirectUri,
+            code,
+          });
+          step2.style.display = "none";
+          step3.style.display = "block";
+          hb.toast.success("Miele tokens saved.");
+        } catch (e) { showError(e); }
+      });
+    })();
+  </script>
+</body>
+</html>
