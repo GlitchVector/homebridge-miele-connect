@@ -3,8 +3,8 @@
   "pluginType": "platform",
   "singular": true,
   "customUi": true,
-  "headerDisplay": "Bridges Miele@home appliances into HomeKit via the Miele 3rd-party cloud API (REST + Server-Sent Events). Get your `clientID` + `clientSecret` at https://developer.miele.com/, fill them in below, then use the **Miele OAuth pairing** card above to obtain and persist the access/refresh token pair.",
-  "footerDisplay": "Token state is persisted under Homebridge's data directory. Once you've set the access/refresh token pair below they are migrated to the persistent store on first launch; subsequent refreshes happen automatically and you can leave the config fields blank after the first successful run.",
+  "headerDisplay": "Bridges Miele@home appliances into HomeKit via the Miele 3rd-party cloud API (REST + Server-Sent Events). Use the **Miele OAuth pairing** card above to obtain credentials at https://developer.miele.com/ and complete the OAuth code-exchange — tokens are persisted server-side under Homebridge's data directory.",
+  "footerDisplay": "",
   "schema": {
     "type": "object",
     "properties": {
@@ -15,26 +15,16 @@
         "required": true
       },
       "clientID": {
-        "title": "Client ID",
-        "type": "string",
-        "required": true,
-        "description": "From the Miele 3rd-party developer portal."
+        "type": "string"
       },
       "clientSecret": {
-        "title": "Client Secret",
-        "type": "string",
-        "required": true,
-        "description": "From the Miele 3rd-party developer portal."
+        "type": "string"
       },
       "accessToken": {
-        "title": "Initial Access Token",
-        "type": "string",
-        "description": "One-time seed; ignored once a persisted token is on disk."
+        "type": "string"
       },
       "refreshToken": {
-        "title": "Initial Refresh Token",
-        "type": "string",
-        "description": "One-time seed; ignored once a persisted token is on disk."
+        "type": "string"
       },
       "language": {
         "title": "API Language",
@@ -49,5 +39,10 @@
         "description": "How often to cycle the SSE event stream proactively. Defends against load-balancer idle drops; 60 minutes is fine for most setups."
       }
     }
-  }
+  },
+  "form": [
+    "name",
+    "language",
+    "reconnectEventStreamMinutes"
+  ]
 }
