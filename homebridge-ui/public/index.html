@@ -13,11 +13,11 @@
     }
     .miele-card h3 { margin-top: 0; }
     .miele-step { margin: 0.75rem 0; }
-    .miele-step input[type=text],
-    .miele-step input[type=password] { width: 100%; max-width: 32rem; }
+    .miele-step label { display: block; margin-bottom: 0.6rem; }
+    .miele-step input { width: 100%; max-width: 32rem; padding: 0.4rem; box-sizing: border-box; }
     .miele-actions { margin-top: 0.5rem; }
     .miele-error { color: #b00020; white-space: pre-wrap; font-family: monospace; }
-    .miele-muted { color: var(--text-muted, #777); font-size: 0.9em; }
+    .miele-muted { color: var(--text-muted, #999); font-size: 0.9em; }
     .miele-link-btn {
       display: inline-block;
       padding: 0.4rem 0.8rem;
@@ -33,14 +33,20 @@
   <div class="miele-card">
     <h3>Miele OAuth pairing</h3>
     <p class="miele-muted">
-      One-time setup. Fill in <code>clientID</code> and <code>clientSecret</code>
-      in the form below this card first (obtained from
-      <a href="https://developer.miele.com/" target="_blank">developer.miele.com</a>),
-      then run the steps here. The resulting access/refresh tokens are persisted
-      server-side under Homebridge's data directory — they don't appear in config.json.
+      One-time setup. Get your <code>clientID</code> and <code>clientSecret</code> from
+      <a href="https://developer.miele.com/" target="_blank">developer.miele.com</a>
+      ("Get Involved"), paste them in below, then click <strong>Start pairing</strong>.
+      The resulting access/refresh tokens are persisted server-side under Homebridge's
+      data directory — they never appear in config.json.
     </p>
 
     <div class="miele-step" id="step-1">
+      <label>Client ID:
+        <input type="text" id="client-id" autocomplete="off" />
+      </label>
+      <label>Client Secret:
+        <input type="password" id="client-secret" autocomplete="off" />
+      </label>
       <label>Region / language (vg):
         <input type="text" id="vg" value="CH-de" />
       </label>
@@ -73,7 +79,7 @@
     <div class="miele-step" id="step-3" style="display:none">
       <p>
         ✅ Pairing complete. Tokens saved to <code>MieleConnect.Token.json</code> in
-        Homebridge's data directory. Save this config and restart the
+        Homebridge's data directory. Click <strong>Save</strong> below, then restart the
         <strong>Miele Connect</strong> child bridge to start discovery.
       </p>
     </div>
@@ -83,11 +89,8 @@
 
   <script>
     (async () => {
-      // homebridge global is injected by Homebridge Config UI X. Show the
-      // schema form below our card so the user can still tweak clientID,
-      // clientSecret, language, periodic-reconnect etc. normally.
+      // homebridge global is injected by Homebridge Config UI X.
       const hb = window.homebridge;
-      hb.showSchemaForm();
 
       const errEl = document.getElementById("miele-error");
       function showError(e) {
@@ -98,26 +101,57 @@
       const step1 = document.getElementById("step-1");
       const step2 = document.getElementById("step-2");
       const step3 = document.getElementById("step-3");
+      const clientIdInput = document.getElementById("client-id");
+      const clientSecretInput = document.getElementById("client-secret");
       const vgInput = document.getElementById("vg");
       const codeInput = document.getElementById("auth-code");
       const authorizeLink = document.getElementById("miele-authorize");
 
       let session = null; // { clientID, clientSecret, redirectUri, state }
 
-      async function readClientCreds() {
+      // Pre-fill from existing config if the user is reopening this dialog
+      // mid-pairing or to re-pair. Also ensure a config block exists so
+      // showSchemaForm() (called at the end) renders the schema fields.
+      try {
         const cfg = await hb.getPluginConfig();
-        const item = (cfg && cfg[0]) || {};
-        return { clientID: item.clientID, clientSecret: item.clientSecret };
+        const item = (cfg && cfg[0]) || {
+          platform: "MieleConnect",
+          name: "Miele Connect",
+        };
+        if (item.clientID) clientIdInput.value = item.clientID;
+        if (item.clientSecret) clientSecretInput.value = item.clientSecret;
+        if (!cfg || cfg.length === 0) {
+          await hb.updatePluginConfig([item]);
+        }
+      } catch (e) {
+        // Non-fatal — user can still type credentials manually.
+        console.warn("miele-ui: could not load existing config:", e);
       }
 
       document.getElementById("btn-start").addEventListener("click", async () => {
         clearError();
         try {
-          const { clientID, clientSecret } = await readClientCreds();
-          if (!clientID || !clientSecret) {
-            throw new Error("Set clientID and clientSecret in the form below first, then click Start pairing.");
-          }
+          const clientID = clientIdInput.value.trim();
+          const clientSecret = clientSecretInput.value.trim();
           const vg = vgInput.value.trim() || "CH-de";
+          if (!clientID || !clientSecret) {
+            throw new Error("Both Client ID and Client Secret are required.");
+          }
+
+          // Persist credentials to plugin config so the runtime can read them
+          // and so they survive UI close mid-pairing. Tokens are NOT stored
+          // here — they go server-side via /exchange.
+          const cfg = await hb.getPluginConfig();
+          const item = (cfg && cfg[0]) || {
+            platform: "MieleConnect",
+            name: "Miele Connect",
+          };
+          item.clientID = clientID;
+          item.clientSecret = clientSecret;
+          const next = [item];
+          await hb.updatePluginConfig(next);
+          await hb.savePluginConfig();
+
           const r = await hb.request("/start", { clientID, vg });
           session = { clientID, clientSecret, redirectUri: r.redirectUri, state: r.state };
           authorizeLink.href = r.authorizeUrl;
@@ -143,6 +177,10 @@
           hb.toast.success("Miele tokens saved.");
         } catch (e) { showError(e); }
       });
+
+      // Now that we've guaranteed a config block exists, render the schema
+      // form for the remaining tweakable fields (language, reconnect interval).
+      hb.showSchemaForm();
     })();
   </script>
 </body>
