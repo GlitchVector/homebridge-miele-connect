@@ -37,10 +37,19 @@ After the first successful refresh the token pair lives in `<homebridge-config-d
 
 ## Getting Miele credentials
 
-1. Register an application at <https://www.miele.com/developer/>.
-2. Note the `clientID` and `clientSecret`.
-3. Follow Miele's OAuth pairing flow to obtain an initial access + refresh token pair for your Miele@home account.
-4. Drop those into the plugin config — the plugin refreshes automatically from there.
+1. Register an application at <https://developer.miele.com/> ("Get Involved" section). Once activated, the portal gives you a `clientID` and `clientSecret`.
+2. Run the one-time OAuth bootstrap helper locally to convert those into the initial access/refresh token pair:
+
+   ```sh
+   npm run bootstrap-oauth -- \
+     --client-id     <YOUR_CLIENT_ID> \
+     --client-secret <YOUR_CLIENT_SECRET>
+     # add --vg CH-de / DE-de / US-en / ... if you're outside CH-de
+   ```
+
+   The script spins a localhost listener, prints the Miele authorize URL, captures the redirect after you log in with your Miele@home account, exchanges the code, and prints the tokens.
+
+3. Paste the four values into Homebridge config.json. After the first successful refresh the plugin migrates the seeds into `<homebridge-config-dir>/MieleConnect.Token.json` and the `accessToken` / `refreshToken` fields can be removed.
 
 ## Status
 
