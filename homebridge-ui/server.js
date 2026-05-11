@@ -1,19 +1,18 @@
-"use strict";
-const { HomebridgePluginUiServer } = require("@homebridge/plugin-ui-utils");
-const crypto = require("node:crypto");
-const fs = require("node:fs/promises");
-const path = require("node:path");
+import { HomebridgePluginUiServer } from "@homebridge/plugin-ui-utils";
+import { randomUUID } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
 const STORAGE_FILE = "MieleConnect.Token.json";
 const MIELE_AUTH = "https://api.mcs3.miele.com/thirdparty/login/";
 const MIELE_TOKEN = "https://api.mcs3.miele.com/thirdparty/token";
 
 /**
- * Non-routable redirect target. Miele will redirect the user's browser here
- * after consent; the page intentionally never loads (no listener), and the
- * user reads the `code` query parameter from the URL bar back into our UI.
- * What matters for the token exchange is that the redirect_uri value sent
- * here matches what was sent in the authorize step.
+ * Non-routable redirect target. Miele redirects the user's browser here after
+ * consent; the page intentionally never loads (no listener) and the user
+ * reads the `code` query parameter off the URL bar. What matters for the
+ * token exchange is that the `redirect_uri` sent in step 2 matches the one
+ * sent in step 1.
  */
 const REDIRECT_URI = "http://localhost:8581/miele-callback";
 
@@ -23,10 +22,8 @@ class MieleConnectUi extends HomebridgePluginUiServer {
 
     this.onRequest("/start", async (payload) => {
       const { clientID, vg } = payload || {};
-      if (!clientID) {
-        throw new Error("clientID is required");
-      }
-      const state = crypto.randomUUID();
+      if (!clientID) throw new Error("clientID is required");
+      const state = randomUUID();
       const url = new URL(MIELE_AUTH);
       url.searchParams.set("response_type", "code");
       url.searchParams.set("client_id", clientID);
@@ -70,16 +67,16 @@ class MieleConnectUi extends HomebridgePluginUiServer {
       if (!storageDir) {
         throw new Error("Homebridge storage path not available from plugin UI runtime");
       }
-      const storagePath = path.join(storageDir, STORAGE_FILE);
-      const payloadOut = {
+      const storagePath = join(storageDir, STORAGE_FILE);
+      const out = {
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
         expires_in: tokens.expires_in,
         token_type: tokens.token_type,
         created_at: new Date().toISOString(),
       };
-      await fs.mkdir(storageDir, { recursive: true });
-      await fs.writeFile(storagePath, JSON.stringify(payloadOut, null, 2), { mode: 0o600 });
+      await mkdir(storageDir, { recursive: true });
+      await writeFile(storagePath, JSON.stringify(out, null, 2), { mode: 0o600 });
 
       // Don't return the tokens to the UI — they're persisted server-side.
       return { ok: true, expires_in: tokens.expires_in };
