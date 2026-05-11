@@ -128,8 +128,12 @@
         console.warn("miele-ui: could not load existing config:", e);
       }
 
-      document.getElementById("btn-start").addEventListener("click", async () => {
+      const btnStart = document.getElementById("btn-start");
+      btnStart.addEventListener("click", async () => {
         clearError();
+        const originalLabel = btnStart.textContent;
+        btnStart.disabled = true;
+        btnStart.textContent = "Working…";
         try {
           const clientID = clientIdInput.value.trim();
           const clientSecret = clientSecretInput.value.trim();
@@ -141,6 +145,7 @@
           // Persist credentials to plugin config so the runtime can read them
           // and so they survive UI close mid-pairing. Tokens are NOT stored
           // here — they go server-side via /exchange.
+          btnStart.textContent = "Saving credentials…";
           const cfg = await hb.getPluginConfig();
           const item = (cfg && cfg[0]) || {
             platform: "MieleConnect",
@@ -148,16 +153,22 @@
           };
           item.clientID = clientID;
           item.clientSecret = clientSecret;
-          const next = [item];
-          await hb.updatePluginConfig(next);
+          await hb.updatePluginConfig([item]);
           await hb.savePluginConfig();
 
+          btnStart.textContent = "Asking Miele…";
           const r = await hb.request("/start", { clientID, vg });
           session = { clientID, clientSecret, redirectUri: r.redirectUri, state: r.state };
           authorizeLink.href = r.authorizeUrl;
           step1.style.display = "none";
           step2.style.display = "block";
-        } catch (e) { showError(e); }
+        } catch (e) {
+          showError(e);
+          hb.toast.error((e && (e.message || e.error)) || String(e));
+        } finally {
+          btnStart.disabled = false;
+          btnStart.textContent = originalLabel;
+        }
       });
 
       document.getElementById("btn-exchange").addEventListener("click", async () => {
