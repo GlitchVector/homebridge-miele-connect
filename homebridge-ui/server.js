@@ -39,21 +39,39 @@ class MieleConnectUi extends HomebridgePluginUiServer {
         throw new Error("clientID, clientSecret, redirectUri and code are all required");
       }
 
+      // Auth codes copied from the redirect URL bar are URL-encoded. Decode
+      // once — URLSearchParams below will encode again on the way out, so
+      // without this we'd send `%2B` as `%252B` and Miele would reject the
+      // code as `invalid_client`.
+      let decodedCode = code;
+      try { decodedCode = decodeURIComponent(code); } catch { /* leave as-is */ }
+
       const body = new URLSearchParams({
         grant_type: "authorization_code",
         client_id: clientID,
         client_secret: clientSecret,
         redirect_uri: redirectUri,
-        code,
+        code: decodedCode,
       });
-      const res = await fetch(MIELE_TOKEN, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          Accept: "application/json",
-        },
-        body,
-      });
+
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), 15_000);
+      let res;
+      try {
+        res = await fetch(MIELE_TOKEN, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            Accept: "application/json",
+          },
+          body,
+          signal: controller.signal,
+        });
+      } catch (err) {
+        throw new Error(`Miele token exchange network error: ${String(err)}`);
+      } finally {
+        clearTimeout(t);
+      }
       if (!res.ok) {
         const detail = await res.text().catch(() => "");
         throw new Error(`Miele token exchange HTTP ${res.status}: ${detail || res.statusText}`);
