@@ -23,6 +23,7 @@ import { WasherDryerAccessory } from "./platformWasherDryerAccessory.js";
 import { FridgeAccessory } from "./platformFridgeAccessory.js";
 import { HoodAccessory } from "./platformHoodAccessory.js";
 import { CoffeeSystemAccessory } from "./platformCoffeeSystemAccessory.js";
+import { HobAccessory } from "./platformHobAccessory.js";
 
 interface MielePlatformConfig extends PlatformConfig {
   clientID?: string;
@@ -204,6 +205,8 @@ export class MielePlatform implements DynamicPlatformPlugin {
         return new HoodAccessory(this, accessory);
       case MieleDeviceType.CoffeeSystem:
         return new CoffeeSystemAccessory(this, accessory);
+      case MieleDeviceType.Hob:
+        return new HobAccessory(this, accessory);
       default:
         return null;
     }

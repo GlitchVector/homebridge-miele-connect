@@ -37,6 +37,7 @@ export enum MieleDeviceType {
   Freezer = 20,
   FridgeFreezer = 21,
   WasherDryer = 24,
+  Hob = 27,
 }
 
 /** Top-level state.status.value_raw values (machine running-state). */
