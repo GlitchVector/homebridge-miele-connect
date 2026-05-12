@@ -65,15 +65,32 @@ export class FridgeAccessory extends PlatformAccessoryBase {
       this.tempServices.push(svc);
     }
 
-    // Drop the legacy single-switch service from earlier versions of this
-    // plugin (subtype "super-mode") — superseded by the per-compartment
-    // super-cool / super-freeze switches added below.
-    const legacy = this.accessory.getServiceById(this.platform.Service.Switch, "super-mode");
-    if (legacy) {
-      this.platform.log.info(
-        `${this.device.displayName}: removing legacy super-mode Switch from cached accessory`,
-      );
-      this.accessory.removeService(legacy);
+    // Diagnostic: dump every service currently on the restored accessory
+    // so we can verify what came back from the cache. Drop after cleanup
+    // is confirmed working.
+    this.platform.log.info(
+      `${this.device.displayName}: cached services on init = ` +
+        JSON.stringify(
+          this.accessory.services.map((s) => ({
+            displayName: s.displayName,
+            subtype: s.subtype,
+            UUID: s.UUID,
+          })),
+        ),
+    );
+
+    // Drop legacy services from earlier plugin versions. We sweep ANY
+    // Switch whose subtype isn't in the current allow-list, which covers
+    // both the v0.1 "super-mode" subtype and any future renames.
+    const wantedSwitchSubtypes = new Set(["super-cool", "super-freeze"]);
+    for (const svc of [...this.accessory.services]) {
+      if (svc.UUID !== this.platform.Service.Switch.UUID) continue;
+      if (!svc.subtype || !wantedSwitchSubtypes.has(svc.subtype)) {
+        this.platform.log.info(
+          `${this.device.displayName}: removing stale Switch subtype=${svc.subtype}`,
+        );
+        this.accessory.removeService(svc);
+      }
     }
 
     this.coolSwitch = this.hasFridge
