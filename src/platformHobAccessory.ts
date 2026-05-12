@@ -38,7 +38,7 @@ export class HobAccessory extends PlatformAccessoryBase {
       raw === MieleProgramState.Idle;
     const occupied = !inactive;
 
-    this.platform.log.debug(
+    this.platform.log.info(
       `${this.device.displayName}: status.value_raw=${raw} → ${occupied ? "OCCUPIED" : "not occupied"}`,
     );
 

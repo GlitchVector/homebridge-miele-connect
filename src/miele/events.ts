@@ -113,10 +113,16 @@ export class MieleEventStream {
     // we receive at info level until the wire format is fully nailed down.
     const handleDeviceStates = (payload: unknown) => {
       if (!payload || typeof payload !== "object") return;
-      for (const [serialNumber, state] of Object.entries(payload as Record<string, unknown>)) {
+      for (const [serialNumber, deviceData] of Object.entries(payload as Record<string, unknown>)) {
+        // The all-devices SSE endpoint emits the FULL device document
+        // (`{ident, state}`) per serial, not just the `state` subfield like
+        // the legacy per-device endpoint did. Tolerate both shapes: prefer
+        // `.state` when present, else assume the value itself is the state.
+        const dd = deviceData as { state?: MieleDeviceState };
+        const state: MieleDeviceState = dd.state ?? (deviceData as MieleDeviceState);
         for (const listener of this.listeners) {
           try {
-            listener({ serialNumber, state: state as MieleDeviceState });
+            listener({ serialNumber, state });
           } catch (e) {
             this.opts.log.error(
               `Miele event listener threw on ${serialNumber}: ${String(e)}`,
@@ -128,7 +134,8 @@ export class MieleEventStream {
 
     this.es.addEventListener("devices", (raw) => {
       const ev = raw as MessageEvent;
-      this.opts.log.info(`Miele SSE 'devices' event: ${ev.data?.slice(0, 200) ?? ""}`);
+      // Wider slice so the `state.status.value_raw` field actually fits.
+      this.opts.log.info(`Miele SSE 'devices' event: ${ev.data?.slice(0, 2000) ?? ""}`);
       try {
         handleDeviceStates(JSON.parse(ev.data));
       } catch (e) {
