@@ -135,7 +135,21 @@ export class FridgeAccessory extends PlatformAccessoryBase {
     onSet: (v: CharacteristicValue) => Promise<void>,
   ): Service {
     const svc = this.useService(this.platform.Service.Switch, name, subtype);
+    // Force the persistent Service.displayName to the new short label so
+    // restored-from-cache services don't keep their old, longer label.
+    // `displayName` is normally set at addService time; HAP-NodeJS reads
+    // it back as a plain property so a direct assignment sticks across
+    // the next cache write.
+    (svc as unknown as { displayName: string }).displayName = name;
     svc.setCharacteristic(this.platform.Characteristic.Name, name);
+    // ConfiguredName is the characteristic iOS Home actually displays
+    // (Name is more of a fallback in modern HAP). Set both.
+    if (svc.testCharacteristic(this.platform.Characteristic.ConfiguredName)) {
+      svc.setCharacteristic(this.platform.Characteristic.ConfiguredName, name);
+    } else {
+      svc.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+      svc.setCharacteristic(this.platform.Characteristic.ConfiguredName, name);
+    }
     svc.getCharacteristic(this.platform.Characteristic.On).onSet(onSet);
     return svc;
   }
