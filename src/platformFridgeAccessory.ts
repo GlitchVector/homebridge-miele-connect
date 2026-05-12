@@ -65,23 +65,24 @@ export class FridgeAccessory extends PlatformAccessoryBase {
       this.tempServices.push(svc);
     }
 
+    // Drop the legacy single-switch service from earlier versions of this
+    // plugin (subtype "super-mode") — superseded by the per-compartment
+    // super-cool / super-freeze switches added below.
+    this.removeServiceIfPresent(this.platform.Service.Switch, "super-mode");
+
     this.coolSwitch = this.hasFridge
-      ? this.makeSuperSwitch(
-          "super-cool",
-          `${this.device.displayName} Super Cooling`,
-          (v) => this.handleSuperSet(v, /* freezer */ false),
+      ? this.makeSuperSwitch("super-cool", "Super Cooling", (v) =>
+          this.handleSuperSet(v, /* freezer */ false),
         )
       : null;
-    if (!this.hasFridge) this.removeServiceIfPresent("super-cool");
+    if (!this.hasFridge) this.removeServiceIfPresent(this.platform.Service.Switch, "super-cool");
 
     this.freezeSwitch = this.hasFreezer
-      ? this.makeSuperSwitch(
-          "super-freeze",
-          `${this.device.displayName} Super Freezing`,
-          (v) => this.handleSuperSet(v, /* freezer */ true),
+      ? this.makeSuperSwitch("super-freeze", "Super Freezing", (v) =>
+          this.handleSuperSet(v, /* freezer */ true),
         )
       : null;
-    if (!this.hasFreezer) this.removeServiceIfPresent("super-freeze");
+    if (!this.hasFreezer) this.removeServiceIfPresent(this.platform.Service.Switch, "super-freeze");
   }
 
   applyState(state: MieleDeviceState): void {
@@ -130,8 +131,11 @@ export class FridgeAccessory extends PlatformAccessoryBase {
     return svc;
   }
 
-  private removeServiceIfPresent(subtype: string): void {
-    const existing = this.accessory.getServiceById(this.platform.Service.Switch, subtype);
+  private removeServiceIfPresent(
+    serviceCtor: Parameters<typeof this.accessory.getServiceById>[0],
+    subtype: string,
+  ): void {
+    const existing = this.accessory.getServiceById(serviceCtor, subtype);
     if (existing) this.accessory.removeService(existing);
   }
 
