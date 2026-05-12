@@ -158,7 +158,7 @@
           await hb.updatePluginConfig([item]);
 
           const r = await hb.request("/start", { clientID, vg });
-          session = { clientID, clientSecret, redirectUri: r.redirectUri, state: r.state };
+          session = { clientID, clientSecret, vg, redirectUri: r.redirectUri, state: r.state };
           authorizeLink.href = r.authorizeUrl;
           step1.style.display = "none";
           step2.style.display = "block";
@@ -185,6 +185,7 @@
             clientID: session.clientID,
             clientSecret: session.clientSecret,
             redirectUri: session.redirectUri,
+            vg: session.vg,
             code,
           });
           // Pairing succeeded — try to persist clientID/clientSecret to

@@ -34,7 +34,14 @@ class MieleConnectUi extends HomebridgePluginUiServer {
     });
 
     this.onRequest("/exchange", async (payload) => {
-      const { clientID, clientSecret, redirectUri, code } = payload || {};
+      const { clientID, clientSecret, redirectUri, code, vg } = payload || {};
+      console.log(
+        `[miele-connect] /exchange: clientID=${clientID ? "set" : "MISSING"} ` +
+          `clientSecret=${clientSecret ? "set" : "MISSING"} ` +
+          `redirectUri=${redirectUri ?? "MISSING"} ` +
+          `code=${code ? `len=${code.length}` : "MISSING"} ` +
+          `vg=${vg ?? "MISSING"}`,
+      );
       if (!clientID || !clientSecret || !redirectUri || !code) {
         throw new Error("clientID, clientSecret, redirectUri and code are all required");
       }
@@ -46,12 +53,17 @@ class MieleConnectUi extends HomebridgePluginUiServer {
       let decodedCode = code;
       try { decodedCode = decodeURIComponent(code); } catch { /* leave as-is */ }
 
+      // Miele's /thirdparty/token requires `vg` (country-language pair) even
+      // on the authorization_code grant; without it the endpoint returns
+      // HTTP 500 "no vg given". The legacy plugin never noticed this because
+      // it only ever did refresh_token grants. Default to CH-de if absent.
       const body = new URLSearchParams({
         grant_type: "authorization_code",
         client_id: clientID,
         client_secret: clientSecret,
         redirect_uri: redirectUri,
         code: decodedCode,
+        vg: vg || "CH-de",
       });
 
       const controller = new AbortController();
@@ -68,12 +80,16 @@ class MieleConnectUi extends HomebridgePluginUiServer {
           signal: controller.signal,
         });
       } catch (err) {
+        console.error(`[miele-connect] /exchange fetch failed: ${String(err)}`);
         throw new Error(`Miele token exchange network error: ${String(err)}`);
       } finally {
         clearTimeout(t);
       }
       if (!res.ok) {
         const detail = await res.text().catch(() => "");
+        console.error(
+          `[miele-connect] /exchange Miele responded HTTP ${res.status}: ${detail}`,
+        );
         throw new Error(`Miele token exchange HTTP ${res.status}: ${detail || res.statusText}`);
       }
       const tokens = await res.json();
