@@ -5,64 +5,83 @@ import type { MielePlatform } from "./platform.js";
 import {
   MieleDeviceType,
   MieleProcessAction,
+  MieleProgramState,
   type MieleDeviceState,
 } from "./miele/types.js";
 
 /**
- * Fridge / Freezer / FridgeFreezer. Exposes:
- *   - one TemperatureSensor per reported temperature zone
- *   - a `Super Mode` switch wired to StartSuper{Cooling,Freezing} /
- *     StopSuper{Cooling,Freezing} (selected by the device type)
+ * Fridge / Freezer / FridgeFreezer.
  *
- * Target-temperature writes are intentionally NOT bound to a HomeKit
- * thermostat: HomeKit's thermostat model wants a heating/cooling threshold
- * setpoint that doesn't map cleanly onto fridge zones, and the legacy plugin
- * already learned this the hard way.
+ * Exposes:
+ *   - one `TemperatureSensor` per reported zone (up to 2: fridge + freezer)
+ *   - a `Super Cooling` switch on devices with a fridge compartment
+ *   - a `Super Freezing` switch on devices with a freezer compartment
+ *
+ * Super-cool / super-freeze are Miele's rapid-chill modes — the compressor
+ * runs at max for ~6h to bring warm groceries down quickly, then returns to
+ * normal. Both modes auto-stop on the appliance side; the switch's read-back
+ * state derives from `state.status.value_raw`:
+ *
+ *   - Supercooling (14)   → super-cool switch ON
+ *   - Superfreezing (13)  → super-freeze switch ON
+ *   - any other value     → both switches OFF
+ *
+ * Limitation: when both modes are simultaneously active on a FridgeFreezer,
+ * Miele only surfaces one of them in `status` at a time. Toggling both
+ * still works (each switch fires its own action), but in HomeKit only the
+ * mode reflected in `status` will read as ON.
  */
 export class FridgeAccessory extends PlatformAccessoryBase {
   private readonly tempServices: Service[] = [];
-  private superSwitch: Service;
-  private readonly isFreezerSide: boolean;
+  private readonly hasFridge: boolean;
+  private readonly hasFreezer: boolean;
+  private readonly coolSwitch: Service | null;
+  private readonly freezeSwitch: Service | null;
 
   constructor(platform: MielePlatform, accessory: PlatformAccessory) {
     super(platform, accessory);
 
-    this.isFreezerSide =
+    this.hasFridge =
+      this.device.rawType === MieleDeviceType.Fridge ||
+      this.device.rawType === MieleDeviceType.FridgeFreezer;
+    this.hasFreezer =
       this.device.rawType === MieleDeviceType.Freezer ||
       this.device.rawType === MieleDeviceType.FridgeFreezer;
 
     // One TemperatureSensor service per zone, subtyped by index so cached
     // services restore correctly across restarts.
-    for (let i = 0; i < 2; i++) {
+    const zoneNames = this.zoneNames();
+    for (let i = 0; i < zoneNames.length; i++) {
       const subtype = `zone-${i}`;
-      const name =
-        i === 0
-          ? this.device.displayName
-          : `${this.device.displayName} Freezer`;
       const svc = this.useService(
         this.platform.Service.TemperatureSensor,
-        name,
+        zoneNames[i],
         subtype,
       );
-      svc.setCharacteristic(this.platform.Characteristic.Name, name);
+      svc.setCharacteristic(this.platform.Characteristic.Name, zoneNames[i]);
       svc
         .getCharacteristic(this.platform.Characteristic.CurrentTemperature)
         .setProps({ minValue: -40, maxValue: 40, minStep: 0.1 });
       this.tempServices.push(svc);
     }
 
-    this.superSwitch = this.useService(
-      this.platform.Service.Switch,
-      `${this.device.displayName} Super ${this.isFreezerSide ? "Freezing" : "Cooling"}`,
-      "super-mode",
-    );
-    this.superSwitch.setCharacteristic(
-      this.platform.Characteristic.Name,
-      `${this.device.displayName} Super ${this.isFreezerSide ? "Freezing" : "Cooling"}`,
-    );
-    this.superSwitch
-      .getCharacteristic(this.platform.Characteristic.On)
-      .onSet((v) => this.handleSuperSet(v));
+    this.coolSwitch = this.hasFridge
+      ? this.makeSuperSwitch(
+          "super-cool",
+          `${this.device.displayName} Super Cooling`,
+          (v) => this.handleSuperSet(v, /* freezer */ false),
+        )
+      : null;
+    if (!this.hasFridge) this.removeServiceIfPresent("super-cool");
+
+    this.freezeSwitch = this.hasFreezer
+      ? this.makeSuperSwitch(
+          "super-freeze",
+          `${this.device.displayName} Super Freezing`,
+          (v) => this.handleSuperSet(v, /* freezer */ true),
+        )
+      : null;
+    if (!this.hasFreezer) this.removeServiceIfPresent("super-freeze");
   }
 
   applyState(state: MieleDeviceState): void {
@@ -77,11 +96,48 @@ export class FridgeAccessory extends PlatformAccessoryBase {
         Math.max(-40, Math.min(40, celsius)),
       );
     });
+
+    const status = state.status?.value_raw ?? MieleProgramState.NotConnected;
+    if (this.coolSwitch) {
+      this.coolSwitch.updateCharacteristic(
+        this.platform.Characteristic.On,
+        status === MieleProgramState.Supercooling,
+      );
+    }
+    if (this.freezeSwitch) {
+      this.freezeSwitch.updateCharacteristic(
+        this.platform.Characteristic.On,
+        status === MieleProgramState.Superfreezing,
+      );
+    }
   }
 
-  private async handleSuperSet(value: CharacteristicValue): Promise<void> {
+  private zoneNames(): string[] {
+    if (this.hasFridge && this.hasFreezer) {
+      return [this.device.displayName, `${this.device.displayName} Freezer`];
+    }
+    return [this.device.displayName];
+  }
+
+  private makeSuperSwitch(
+    subtype: string,
+    name: string,
+    onSet: (v: CharacteristicValue) => Promise<void>,
+  ): Service {
+    const svc = this.useService(this.platform.Service.Switch, name, subtype);
+    svc.setCharacteristic(this.platform.Characteristic.Name, name);
+    svc.getCharacteristic(this.platform.Characteristic.On).onSet(onSet);
+    return svc;
+  }
+
+  private removeServiceIfPresent(subtype: string): void {
+    const existing = this.accessory.getServiceById(this.platform.Service.Switch, subtype);
+    if (existing) this.accessory.removeService(existing);
+  }
+
+  private async handleSuperSet(value: CharacteristicValue, freezer: boolean): Promise<void> {
     const turnOn = Boolean(value);
-    const action = this.isFreezerSide
+    const action = freezer
       ? turnOn
         ? MieleProcessAction.StartSuperFreezing
         : MieleProcessAction.StopSuperFreezing
@@ -92,15 +148,15 @@ export class FridgeAccessory extends PlatformAccessoryBase {
       const allowed = await this.platform.api.getAllowedActions(this.device.serialNumber);
       if (!allowed.processAction?.includes(action)) {
         this.platform.log.info(
-          `${this.device.displayName}: ignoring Super-mode write — Miele reports allowed=` +
-            `${JSON.stringify(allowed.processAction)} in the current state.`,
+          `${this.device.displayName}: ignoring ${freezer ? "Super Freezing" : "Super Cooling"}=${turnOn} — ` +
+            `Miele reports allowed=${JSON.stringify(allowed.processAction)} right now.`,
         );
         return;
       }
       await this.platform.api.putAction(this.device.serialNumber, { processAction: action });
     } catch (err) {
       this.platform.log.error(
-        `${this.device.displayName}: Super-mode write failed: ${String(err)}`,
+        `${this.device.displayName}: ${freezer ? "Super Freezing" : "Super Cooling"} write failed: ${String(err)}`,
       );
     }
   }
