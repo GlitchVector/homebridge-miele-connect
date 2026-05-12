@@ -134,8 +134,7 @@ export class MieleEventStream {
 
     this.es.addEventListener("devices", (raw) => {
       const ev = raw as MessageEvent;
-      // Wider slice so the `state.status.value_raw` field actually fits.
-      this.opts.log.info(`Miele SSE 'devices' event: ${ev.data?.slice(0, 2000) ?? ""}`);
+      this.opts.log.debug(`Miele SSE 'devices' event: ${ev.data?.slice(0, 2000) ?? ""}`);
       try {
         handleDeviceStates(JSON.parse(ev.data));
       } catch (e) {
@@ -143,27 +142,23 @@ export class MieleEventStream {
       }
     });
 
-    // Per-device shape: payload is a SINGLE device's state, not a serial map.
-    // Without a deviceId on the wire we'd have to infer; the all-devices
-    // endpoint flips this to plural, so this branch should be quiet — but log
-    // anyway so we notice if it fires.
+    // Miele's docs are sparse on the all-devices endpoint event names.
+    // Listen for both 'device' (legacy per-device shape) and 'actions'
+    // (allowed-actions changes) at debug level so we'd notice if Miele
+    // ever changed the wire format.
     this.es.addEventListener("device", (raw) => {
       const ev = raw as MessageEvent;
-      this.opts.log.info(`Miele SSE 'device' event (singular): ${ev.data?.slice(0, 200) ?? ""}`);
+      this.opts.log.debug(`Miele SSE 'device' event (singular): ${ev.data?.slice(0, 200) ?? ""}`);
     });
-
     this.es.addEventListener("actions", (raw) => {
       const ev = raw as MessageEvent;
-      this.opts.log.info(`Miele SSE 'actions' event: ${ev.data?.slice(0, 200) ?? ""}`);
+      this.opts.log.debug(`Miele SSE 'actions' event: ${ev.data?.slice(0, 200) ?? ""}`);
     });
-
     this.es.addEventListener("ping", () => {
       /* keep-alive — nothing to do */
     });
-
-    // Generic "message" handler catches any unnamed events Miele might send.
     this.es.onmessage = (raw) => {
-      this.opts.log.info(`Miele SSE unnamed message: ${raw.data?.slice(0, 200) ?? ""}`);
+      this.opts.log.debug(`Miele SSE unnamed message: ${raw.data?.slice(0, 200) ?? ""}`);
     };
 
     this.es.onopen = () => {

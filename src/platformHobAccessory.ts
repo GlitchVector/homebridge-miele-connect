@@ -10,14 +10,16 @@ import { MieleProgramState, type MieleDeviceState } from "./miele/types.js";
  * Miele's 3rd-party API does NOT allow remotely turning a hob on — safety
  * reasons (hot surface, no way to verify nothing's resting on it). So this
  * accessory is intentionally read-only and exposes an `OccupancySensor`:
- * "occupied" while at least one zone is heating, "not occupied" when the
- * hob is off/standby. That maps cleanly onto HomeKit automations
- * ("when occupancy detected → run scene X").
+ * "occupied" while the hob is powered, "not occupied" when fully off.
+ * That maps cleanly onto HomeKit automations ("when occupancy detected
+ * → run scene X").
  *
  * Aggregation rule: occupied = status.value_raw is NOT one of
- * {Off, StandBy, NotConnected, Idle}. Everything else (Running, Pause,
- * ProgramSelected, …) is treated as "in use" because for a hob, the
- * device only leaves Off/StandBy when a zone is actually drawing power.
+ * {Off, NotConnected, Idle}. StandBy (the 10-second "power button on,
+ * waiting for you to pick a zone" window before auto-shutoff) IS
+ * counted as occupied so the automation fires the moment the user
+ * touches the cooktop — by the time they pick a zone the kitchen
+ * lights are already on.
  */
 export class HobAccessory extends PlatformAccessoryBase {
   private sensor: Service;
@@ -33,12 +35,11 @@ export class HobAccessory extends PlatformAccessoryBase {
     const raw = state.status?.value_raw ?? MieleProgramState.NotConnected;
     const inactive =
       raw === MieleProgramState.Off ||
-      raw === MieleProgramState.StandBy ||
       raw === MieleProgramState.NotConnected ||
       raw === MieleProgramState.Idle;
     const occupied = !inactive;
 
-    this.platform.log.info(
+    this.platform.log.debug(
       `${this.device.displayName}: status.value_raw=${raw} → ${occupied ? "OCCUPIED" : "not occupied"}`,
     );
 
