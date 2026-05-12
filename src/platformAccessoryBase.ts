@@ -49,7 +49,9 @@ export abstract class PlatformAccessoryBase {
     const existing = subtype
       ? this.accessory.getServiceById(serviceCtor, subtype)
       : this.accessory.getService(serviceCtor);
-    if (existing) return existing;
+    if (existing) {
+      return existing;
+    }
     return this.accessory.addService(serviceCtor, name, subtype ?? "");
   }
 

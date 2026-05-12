@@ -70,7 +70,9 @@ export class FridgeAccessory extends PlatformAccessoryBase {
     // single-switch "super-mode" subtype and any future renames.
     const wantedSwitchSubtypes = new Set(["super-cool", "super-freeze"]);
     for (const svc of [...this.accessory.services]) {
-      if (svc.UUID !== this.platform.Service.Switch.UUID) continue;
+      if (svc.UUID !== this.platform.Service.Switch.UUID) {
+        continue;
+      }
       if (!svc.subtype || !wantedSwitchSubtypes.has(svc.subtype)) {
         this.platform.log.info(
           `${this.device.displayName}: removing stale Switch subtype=${svc.subtype}`,
@@ -81,24 +83,30 @@ export class FridgeAccessory extends PlatformAccessoryBase {
 
     this.coolSwitch = this.hasFridge
       ? this.makeSuperSwitch("super-cool", "Super Cooling", (v) =>
-          this.handleSuperSet(v, /* freezer */ false),
-        )
+        this.handleSuperSet(v, /* freezer */ false),
+      )
       : null;
-    if (!this.hasFridge) this.removeServiceIfPresent(this.platform.Service.Switch, "super-cool");
+    if (!this.hasFridge) {
+      this.removeServiceIfPresent(this.platform.Service.Switch, "super-cool");
+    }
 
     this.freezeSwitch = this.hasFreezer
       ? this.makeSuperSwitch("super-freeze", "Super Freezing", (v) =>
-          this.handleSuperSet(v, /* freezer */ true),
-        )
+        this.handleSuperSet(v, /* freezer */ true),
+      )
       : null;
-    if (!this.hasFreezer) this.removeServiceIfPresent(this.platform.Service.Switch, "super-freeze");
+    if (!this.hasFreezer) {
+      this.removeServiceIfPresent(this.platform.Service.Switch, "super-freeze");
+    }
   }
 
   applyState(state: MieleDeviceState): void {
     const temps = state.temperature ?? [];
     temps.forEach((entry, i) => {
       const svc = this.tempServices[i];
-      if (!svc || entry.value_raw === undefined || entry.value_raw === -32768) return;
+      if (!svc || entry.value_raw === undefined || entry.value_raw === -32768) {
+        return;
+      }
       const celsius =
         Math.abs(entry.value_raw) > 200 ? entry.value_raw / 100 : entry.value_raw;
       svc.updateCharacteristic(
@@ -159,7 +167,9 @@ export class FridgeAccessory extends PlatformAccessoryBase {
     subtype: string,
   ): void {
     const existing = this.accessory.getServiceById(serviceCtor, subtype);
-    if (existing) this.accessory.removeService(existing);
+    if (existing) {
+      this.accessory.removeService(existing);
+    }
   }
 
   private async handleSuperSet(value: CharacteristicValue, freezer: boolean): Promise<void> {

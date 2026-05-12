@@ -58,7 +58,9 @@ export class WasherDryerAccessory extends PlatformAccessoryBase {
         .setProps({ minValue: 0, maxValue: 110 });
     } else {
       const existing = this.accessory.getService(this.platform.Service.TemperatureSensor);
-      if (existing) this.accessory.removeService(existing);
+      if (existing) {
+        this.accessory.removeService(existing);
+      }
     }
   }
 
