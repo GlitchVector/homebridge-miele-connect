@@ -106,38 +106,58 @@ export class MieleEventStream {
     } as unknown as EventSourceInit;
     this.es = new EventSource(url, init);
 
-    this.es.addEventListener("devices", (raw) => {
-      const ev = raw as MessageEvent;
-      try {
-        const payload = JSON.parse(ev.data) as Record<string, MieleDeviceState>;
-        for (const [serialNumber, state] of Object.entries(payload)) {
-          for (const listener of this.listeners) {
-            try {
-              listener({ serialNumber, state });
-            } catch (e) {
-              this.opts.log.error(
-                `Miele event listener threw on ${serialNumber}: ${String(e)}`,
-              );
-            }
+    // Wire a single dispatcher that handles every named event we encounter.
+    // The legacy plugin (per-device SSE) used "device" (singular). For the
+    // all-devices endpoint Miele's docs are sparse; observed event names
+    // include "devices" and "device". Listen for both, plus log anything
+    // we receive at info level until the wire format is fully nailed down.
+    const handleDeviceStates = (payload: unknown) => {
+      if (!payload || typeof payload !== "object") return;
+      for (const [serialNumber, state] of Object.entries(payload as Record<string, unknown>)) {
+        for (const listener of this.listeners) {
+          try {
+            listener({ serialNumber, state: state as MieleDeviceState });
+          } catch (e) {
+            this.opts.log.error(
+              `Miele event listener threw on ${serialNumber}: ${String(e)}`,
+            );
           }
         }
+      }
+    };
+
+    this.es.addEventListener("devices", (raw) => {
+      const ev = raw as MessageEvent;
+      this.opts.log.info(`Miele SSE 'devices' event: ${ev.data?.slice(0, 200) ?? ""}`);
+      try {
+        handleDeviceStates(JSON.parse(ev.data));
       } catch (e) {
-        this.opts.log.error(
-          `Miele event stream: malformed payload: ${String(e)}`,
-        );
+        this.opts.log.error(`Miele event stream: malformed 'devices' payload: ${String(e)}`);
       }
     });
 
-    // Miele sends `actions` events when allowed-actions change. Plugin doesn't
-    // currently react to these (we re-fetch lazily on user input) but we log
-    // them at debug so they're visible during development.
+    // Per-device shape: payload is a SINGLE device's state, not a serial map.
+    // Without a deviceId on the wire we'd have to infer; the all-devices
+    // endpoint flips this to plural, so this branch should be quiet — but log
+    // anyway so we notice if it fires.
+    this.es.addEventListener("device", (raw) => {
+      const ev = raw as MessageEvent;
+      this.opts.log.info(`Miele SSE 'device' event (singular): ${ev.data?.slice(0, 200) ?? ""}`);
+    });
+
     this.es.addEventListener("actions", (raw) => {
-      this.opts.log.debug(`Miele actions event: ${(raw as MessageEvent).data}`);
+      const ev = raw as MessageEvent;
+      this.opts.log.info(`Miele SSE 'actions' event: ${ev.data?.slice(0, 200) ?? ""}`);
     });
 
     this.es.addEventListener("ping", () => {
       /* keep-alive — nothing to do */
     });
+
+    // Generic "message" handler catches any unnamed events Miele might send.
+    this.es.onmessage = (raw) => {
+      this.opts.log.info(`Miele SSE unnamed message: ${raw.data?.slice(0, 200) ?? ""}`);
+    };
 
     this.es.onopen = () => {
       this.opts.log.info(`Miele event stream: connected (${reason}).`);
