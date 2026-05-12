@@ -83,7 +83,12 @@ export class MielePlatform implements DynamicPlatformPlugin {
     this.token = new MieleToken({
       clientID: this.config.clientID,
       clientSecret: this.config.clientSecret,
-      storageDir: this.hbApi.user.persistPath(),
+      // Use the storage ROOT (api.user.storagePath()) not persistPath().
+      // The custom UI's server.js writes the token via
+      // process.env.HOMEBRIDGE_STORAGE_PATH which resolves to the same
+      // root, NOT to the persist/ subdirectory. They have to match or
+      // tokens written by the UI are invisible to the runtime.
+      storageDir: this.hbApi.user.storagePath(),
       log: this.log,
       fallback: {
         accessToken: this.config.accessToken,
