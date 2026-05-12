@@ -68,7 +68,13 @@ export class FridgeAccessory extends PlatformAccessoryBase {
     // Drop the legacy single-switch service from earlier versions of this
     // plugin (subtype "super-mode") — superseded by the per-compartment
     // super-cool / super-freeze switches added below.
-    this.removeServiceIfPresent(this.platform.Service.Switch, "super-mode");
+    const legacy = this.accessory.getServiceById(this.platform.Service.Switch, "super-mode");
+    if (legacy) {
+      this.platform.log.info(
+        `${this.device.displayName}: removing legacy super-mode Switch from cached accessory`,
+      );
+      this.accessory.removeService(legacy);
+    }
 
     this.coolSwitch = this.hasFridge
       ? this.makeSuperSwitch("super-cool", "Super Cooling", (v) =>
