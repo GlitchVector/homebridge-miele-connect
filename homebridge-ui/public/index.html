@@ -188,21 +188,14 @@
             vg: session.vg,
             code,
           });
-          // Pairing succeeded — try to persist clientID/clientSecret to
-          // config.json now. Best-effort: if savePluginConfig is unhappy we
-          // surface a toast but still report success, since the tokens are
-          // already on disk server-side.
-          try {
-            await hb.savePluginConfig();
-          } catch (saveErr) {
-            hb.toast.warning(
-              "Pairing OK, but couldn't auto-save credentials — hit the Save button below.",
-            );
-            console.warn("miele-ui: savePluginConfig after pairing failed:", saveErr);
-          }
+          // Pairing succeeded server-side (tokens are persisted via the
+          // /exchange handler). Don't call savePluginConfig() here — it
+          // routinely hangs on this codepath and would freeze the button.
+          // The user's modal "Save" button will flush clientID/clientSecret
+          // staged by the Start pairing handler.
           step2.style.display = "none";
           step3.style.display = "block";
-          hb.toast.success("Miele tokens saved.");
+          hb.toast.success("Miele tokens saved. Click Save below + restart the Miele Connect child bridge.");
         } catch (e) {
           showError(e);
           hb.toast.error((e && (e.message || e.error)) || String(e));
