@@ -65,23 +65,9 @@ export class FridgeAccessory extends PlatformAccessoryBase {
       this.tempServices.push(svc);
     }
 
-    // Diagnostic: dump every service currently on the restored accessory
-    // so we can verify what came back from the cache. Drop after cleanup
-    // is confirmed working.
-    this.platform.log.info(
-      `${this.device.displayName}: cached services on init = ` +
-        JSON.stringify(
-          this.accessory.services.map((s) => ({
-            displayName: s.displayName,
-            subtype: s.subtype,
-            UUID: s.UUID,
-          })),
-        ),
-    );
-
-    // Drop legacy services from earlier plugin versions. We sweep ANY
-    // Switch whose subtype isn't in the current allow-list, which covers
-    // both the v0.1 "super-mode" subtype and any future renames.
+    // Drop legacy services from earlier plugin versions. Sweep any Switch
+    // whose subtype isn't in the current allow-list — covers v0.1's
+    // single-switch "super-mode" subtype and any future renames.
     const wantedSwitchSubtypes = new Set(["super-cool", "super-freeze"]);
     for (const svc of [...this.accessory.services]) {
       if (svc.UUID !== this.platform.Service.Switch.UUID) continue;
