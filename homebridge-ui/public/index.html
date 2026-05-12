@@ -142,10 +142,12 @@
             throw new Error("Both Client ID and Client Secret are required.");
           }
 
-          // Persist credentials to plugin config so the runtime can read them
-          // and so they survive UI close mid-pairing. Tokens are NOT stored
-          // here — they go server-side via /exchange.
-          btnStart.textContent = "Saving credentials…";
+          // Stage clientID/clientSecret into the in-memory plugin config so
+          // they survive a dialog close. We deliberately do NOT call
+          // savePluginConfig() here — that hangs the flow on first-time
+          // setups; the modal's own Save button will flush the changes (or
+          // the Complete pairing handler will, after successful exchange).
+          btnStart.textContent = "Asking Miele…";
           const cfg = await hb.getPluginConfig();
           const item = (cfg && cfg[0]) || {
             platform: "MieleConnect",
@@ -154,9 +156,7 @@
           item.clientID = clientID;
           item.clientSecret = clientSecret;
           await hb.updatePluginConfig([item]);
-          await hb.savePluginConfig();
 
-          btnStart.textContent = "Asking Miele…";
           const r = await hb.request("/start", { clientID, vg });
           session = { clientID, clientSecret, redirectUri: r.redirectUri, state: r.state };
           authorizeLink.href = r.authorizeUrl;
@@ -171,8 +171,12 @@
         }
       });
 
-      document.getElementById("btn-exchange").addEventListener("click", async () => {
+      const btnExchange = document.getElementById("btn-exchange");
+      btnExchange.addEventListener("click", async () => {
         clearError();
+        const originalLabel = btnExchange.textContent;
+        btnExchange.disabled = true;
+        btnExchange.textContent = "Exchanging…";
         try {
           if (!session) throw new Error("No active pairing session — click Start pairing first.");
           const code = codeInput.value.trim();
@@ -183,10 +187,28 @@
             redirectUri: session.redirectUri,
             code,
           });
+          // Pairing succeeded — try to persist clientID/clientSecret to
+          // config.json now. Best-effort: if savePluginConfig is unhappy we
+          // surface a toast but still report success, since the tokens are
+          // already on disk server-side.
+          try {
+            await hb.savePluginConfig();
+          } catch (saveErr) {
+            hb.toast.warning(
+              "Pairing OK, but couldn't auto-save credentials — hit the Save button below.",
+            );
+            console.warn("miele-ui: savePluginConfig after pairing failed:", saveErr);
+          }
           step2.style.display = "none";
           step3.style.display = "block";
           hb.toast.success("Miele tokens saved.");
-        } catch (e) { showError(e); }
+        } catch (e) {
+          showError(e);
+          hb.toast.error((e && (e.message || e.error)) || String(e));
+        } finally {
+          btnExchange.disabled = false;
+          btnExchange.textContent = originalLabel;
+        }
       });
 
       // Now that we've guaranteed a config block exists, render the schema
