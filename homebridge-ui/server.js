@@ -66,25 +66,29 @@ class MieleConnectUi extends HomebridgePluginUiServer {
         vg: vg || "CH-de",
       });
 
-      const controller = new AbortController();
-      const t = setTimeout(() => controller.abort(), 15_000);
+      console.log("[miele-connect] /exchange POSTing to Miele…");
       let res;
       try {
-        res = await fetch(MIELE_TOKEN, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            Accept: "application/json",
-          },
-          body,
-          signal: controller.signal,
-        });
+        // Promise.race timeout — AbortController alone proved unreliable
+        // here (the inner fetch sat for 30+s past the abort with no error).
+        res = await Promise.race([
+          fetch(MIELE_TOKEN, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+              Accept: "application/json",
+            },
+            body,
+          }),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("Miele token exchange timed out after 15s")), 15_000),
+          ),
+        ]);
       } catch (err) {
         console.error(`[miele-connect] /exchange fetch failed: ${String(err)}`);
         throw new Error(`Miele token exchange network error: ${String(err)}`);
-      } finally {
-        clearTimeout(t);
       }
+      console.log(`[miele-connect] /exchange Miele responded HTTP ${res.status}`);
       if (!res.ok) {
         const detail = await res.text().catch(() => "");
         console.error(
