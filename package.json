@@ -2,7 +2,7 @@
   "displayName": "Homebridge Miele Connect",
   "name": "homebridge-miele-connect",
   "type": "module",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Homebridge plugin for Miele@home appliances (washers, dryers, dishwashers, hoods, fridges, coffee systems) via the Miele 3rd-party cloud API.",
   "author": "Remo Vetere <remo.vetere@gmail.com>",
   "license": "Apache-2.0",

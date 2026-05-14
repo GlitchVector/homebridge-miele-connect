@@ -24,6 +24,7 @@ const MAX_REMAINING_SECONDS = 8 * 3600;
 export class WasherDryerAccessory extends PlatformAccessoryBase {
   private valve: Service;
   private tempService: Service | undefined;
+  private firstStateLogged = false;
 
   constructor(
     platform: MielePlatform,
@@ -95,14 +96,57 @@ export class WasherDryerAccessory extends PlatformAccessoryBase {
     );
 
     if (this.tempService) {
-      const t = state.targetTemperature?.[0]?.value_raw ?? state.temperature?.[0]?.value_raw;
-      // Miele reports centi-degrees for some endpoints; -32768 means "no reading".
-      if (t !== undefined && t > -10000) {
-        const celsius = Math.abs(t) > 200 ? t / 100 : t;
+      if (!this.firstStateLogged &&
+        ((state.temperature?.length ?? 0) > 0 || (state.targetTemperature?.length ?? 0) > 0)) {
+        this.platform.log.info(
+          `${this.device.displayName} first temp payload: state=${programRaw} ` +
+          `temperature=${JSON.stringify(state.temperature)} ` +
+          `targetTemperature=${JSON.stringify(state.targetTemperature)}`,
+        );
+        this.firstStateLogged = true;
+      }
+      // Miele keeps reporting the last-selected program's target temp
+      // even when the appliance is idle/done, which surfaces in HomeKit
+      // as a permanently "warm" tile (e.g. 30°C forever). Only display
+      // a temperature while a cycle is actually live; otherwise zero
+      // out so the tile reads as "off". ProgramSelected/Programmed are
+      // intentionally excluded — those are pre-start setpoints the
+      // user already saw on the appliance and doesn't need duplicated
+      // in HomeKit.
+      const isLive =
+        programRaw === MieleProgramState.Running ||
+        programRaw === MieleProgramState.Pause;
+      if (!isLive) {
         this.tempService.updateCharacteristic(
           this.platform.Characteristic.CurrentTemperature,
-          Math.max(0, Math.min(110, celsius)),
+          0,
         );
+      } else {
+        const target = state.targetTemperature?.[0];
+        const current = state.temperature?.[0];
+        const entry =
+          target && target.value_raw !== undefined && target.value_raw !== -32768
+            ? target
+            : current;
+        if (entry && entry.value_raw !== undefined && entry.value_raw !== -32768) {
+          // Prefer value_localized (appliance-displayed number); fall
+          // back to /100 per the documented centi-degree spec.
+          let celsius: number;
+          if (
+            typeof entry.value_localized === "number" &&
+            Number.isFinite(entry.value_localized)
+          ) {
+            celsius = entry.unit === "Fahrenheit"
+              ? (entry.value_localized - 32) * 5 / 9
+              : entry.value_localized;
+          } else {
+            celsius = entry.value_raw / 100;
+          }
+          this.tempService.updateCharacteristic(
+            this.platform.Characteristic.CurrentTemperature,
+            Math.max(0, Math.min(110, celsius)),
+          );
+        }
       }
     }
   }
