@@ -37,6 +37,7 @@ export class FridgeAccessory extends PlatformAccessoryBase {
   private readonly hasFreezer: boolean;
   private readonly coolSwitch: Service | null;
   private readonly freezeSwitch: Service | null;
+  private firstStateLogged = false;
 
   constructor(platform: MielePlatform, accessory: PlatformAccessory) {
     super(platform, accessory);
@@ -102,13 +103,35 @@ export class FridgeAccessory extends PlatformAccessoryBase {
 
   applyState(state: MieleDeviceState): void {
     const temps = state.temperature ?? [];
+    if (!this.firstStateLogged && temps.length > 0) {
+      this.platform.log.info(
+        `${this.device.displayName} first temperature payload: ${JSON.stringify(temps)}`,
+      );
+      this.firstStateLogged = true;
+    }
     temps.forEach((entry, i) => {
       const svc = this.tempServices[i];
       if (!svc || entry.value_raw === undefined || entry.value_raw === -32768) {
         return;
       }
-      const celsius =
-        Math.abs(entry.value_raw) > 200 ? entry.value_raw / 100 : entry.value_raw;
+      // value_raw is documented as centi-degrees (×100) but in practice
+      // some Miele appliances/zones return deci-degrees (×10), with no
+      // scale field to disambiguate. The previous magnitude heuristic
+      // (`|raw|>200 ? /100 : raw`) mis-scaled a 4.0°C fridge (raw=40 →
+      // displayed 40°C). value_localized is the appliance's display
+      // value already in the user's chosen unit — use that when
+      // present, fall back to the documented /100 spec otherwise.
+      let celsius: number;
+      if (
+        typeof entry.value_localized === "number" &&
+        Number.isFinite(entry.value_localized)
+      ) {
+        celsius = entry.unit === "Fahrenheit"
+          ? (entry.value_localized - 32) * 5 / 9
+          : entry.value_localized;
+      } else {
+        celsius = entry.value_raw / 100;
+      }
       svc.updateCharacteristic(
         this.platform.Characteristic.CurrentTemperature,
         Math.max(-40, Math.min(40, celsius)),
